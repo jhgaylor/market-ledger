@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Market Ledger
+## Notes: Guild price checks (type ? and an item link in guild chat) and the data behind wow-market.apps.inevitable.fyi.
+## Author: jhgaylor
+## Version: @project-version@
+## Dependencies: Auctionator
+## SavedVariables: MARKETLEDGER_DB
+
+Data\Feed.lua
+MarketLedger.lua
