@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"golang.org/x/sys/windows/registry"
@@ -32,4 +33,12 @@ func setStartAtLogin(on bool) error {
 	}
 	exe, _ = filepath.Abs(exe)
 	return k.SetStringValue("MarketLedger", `"`+exe+`"`)
+}
+
+// installUpdate runs the downloaded installer silently. It asks this copy to quit (--quit),
+// installs over it, and starts the new version.
+func cleanupBundleLeftovers() {}
+
+func installUpdate(setupPath string) error {
+	return exec.Command(setupPath, "/S").Start()
 }

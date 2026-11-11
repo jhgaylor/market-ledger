@@ -89,9 +89,21 @@ func main() {
 	_ = os.MkdirAll(dir, 0o700)
 
 	// One copy at a time: the second one just exits.
+	// One copy at a time. If one's already running, ask it to quit and take over (so opening a
+	// newer version, or an update, replaces the old one); a copy too old to answer keeps running.
 	lock, err := net.Listen("tcp", lockAddr)
 	if err != nil {
-		return
+		if c, derr := net.DialTimeout("tcp", lockAddr, 2*time.Second); derr == nil {
+			_, _ = c.Write([]byte("quit\n"))
+			_ = c.Close()
+		}
+		for i := 0; i < 20 && err != nil; i++ {
+			time.Sleep(250 * time.Millisecond)
+			lock, err = net.Listen("tcp", lockAddr)
+		}
+		if err != nil {
+			return
+		}
 	}
 	defer lock.Close()
 	go func() {
@@ -121,6 +133,7 @@ func main() {
 	}
 	a.loadConfig()
 	a.log("Market Ledger %s starting", version)
+	cleanupUpdateLeftovers()
 	systray.Run(a.onReady, func() { a.log("quit") })
 }
 
@@ -180,7 +193,7 @@ func (a *App) onReady() {
 		a.items[key] = it
 	}
 	systray.AddSeparator()
-	a.update = systray.AddMenuItem("Update available: download", "A newer Market Ledger app is out")
+	a.update = systray.AddMenuItem("Update available", "Download and install the newer Market Ledger app")
 	a.update.Hide()
 	syncItem := systray.AddMenuItem("Sync now", "Upload new scans and download the latest prices")
 	siteItem := systray.AddMenuItem("Open the Market Ledger website", "")
@@ -201,7 +214,7 @@ func (a *App) onReady() {
 		for {
 			select {
 			case <-a.update.ClickedCh:
-				openURL(a.cfg.Server + "/#/join")
+				go a.updateNow()
 			case <-syncItem.ClickedCh:
 				a.kick()
 			case <-siteItem.ClickedCh:
@@ -337,8 +350,11 @@ func (a *App) checkAppUpdate() {
 	}
 	for _, r := range rels {
 		if r.Name == name && version != "dev" && newer(r.Version, version) {
-			a.update.SetTitle("Update available (" + r.Version + "): download")
+			a.update.SetTitle("Update to " + r.Version + " now")
 			a.update.Show()
+			if os.Getenv("MARKETLEDGER_TEST_UPDATE") == "1" { // development: exercise the updater
+				go a.updateNow()
+			}
 			return
 		}
 	}
