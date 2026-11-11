@@ -61,7 +61,7 @@ Section "Install"
   WriteRegStr HKCU "${UNINSTKEY}" "DisplayName" "${APPNAME}"
   WriteRegStr HKCU "${UNINSTKEY}" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "${UNINSTKEY}" "Publisher" "Jake Gaylor"
-  WriteRegStr HKCU "${UNINSTKEY}" "URLInfoAbout" "https://wow-market.apps.inevitable.fyi"
+  WriteRegStr HKCU "${UNINSTKEY}" "URLInfoAbout" "https://goblin.trading"
   WriteRegStr HKCU "${UNINSTKEY}" "DisplayIcon" "$INSTDIR\${EXE}"
   WriteRegStr HKCU "${UNINSTKEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNINSTKEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'

@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: Market Ledger
-## Notes: Guild price checks (type ? and an item link in guild chat) and the data behind wow-market.apps.inevitable.fyi.
+## Notes: Guild price checks (type ? and an item link in guild chat) and the data behind goblin.trading.
 ## Author: jhgaylor
 ## Version: @project-version@
 ## Dependencies: Auctionator

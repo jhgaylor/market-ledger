@@ -1,7 +1,7 @@
 # Market Ledger
 
 Guild-wide auction house prices for **World of Warcraft Forever**: price checks in chat, and a
-shared price history at **https://wow-market.apps.inevitable.fyi**.
+shared price history at **https://goblin.trading**.
 
 This repository is the complete source of the two things players install, published so anyone can
 check exactly what they do:
@@ -35,7 +35,7 @@ A menu bar (Mac) / system tray (Windows) program. Everything it does is in `app/
 |---|---|
 | **Reads** | Only `WTF/Account/<account>/SavedVariables/Auctionator.lua` and `MarketLedger.lua` in your WoW Forever folder, checked every 30 seconds (`sync.go`). It finds the folder from Battle.net's config file and the usual install places (`wow.go`), or the folder you pick. |
 | **Writes** | Only `Interface/AddOns/MarketLedger` (installing/updating the addon) and its price file `Interface/AddOns/MarketLedger/Data/Feed.lua`, plus its own settings and log (Mac `~/Library/Application Support/MarketLedger/`, Windows `%APPDATA%\MarketLedger\`). |
-| **Sends** | Only to `wow-market.apps.inevitable.fyi`: a one-time anonymous registration (platform and app version), and the two files above when they change. From `Auctionator.lua` it sends **only** the price database and vendor price cache; Auctionator's settings, shopping lists and posting history stay on your computer (`strip.go`). |
+| **Sends** | Only to `goblin.trading` (versions before 0.3 used its other name, `wow-market.apps.inevitable.fyi`): a one-time anonymous registration (platform and app version), and the two files above when they change. From `Auctionator.lua` it sends **only** the price database and vendor price cache; Auctionator's settings, shopping lists and posting history stay on your computer (`strip.go`). |
 | **Downloads** | The merged price file every ~10 minutes, the addon when a new version is out, and a version list to tell you when the app has an update. |
 | **Starts** | At login (Mac: `~/Library/LaunchAgents/fyi.inevitable.marketledger.plist`; Windows: the per-user `Run` registry value `MarketLedger`), unless you untick "Start at login". |
 

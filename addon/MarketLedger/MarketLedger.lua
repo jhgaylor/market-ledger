@@ -337,12 +337,16 @@ end
 local itemQueue, queued, pumping = {}, {}, false
 
 local function SaveItem(id)
-  local name, _, quality, ilvl, _, _, _, _, _, _, sellPrice, classID, subclassID = GetItemInfoCompat(id)
-  if name then db.items[id] = { n = name, q = quality, l = ilvl, v = sellPrice, c = classID, s = subclassID } end
+  local name, _, quality, ilvl, _, _, _, _, _, icon, sellPrice, classID, subclassID = GetItemInfoCompat(id)
+  if name then
+    db.items[id] = { n = name, q = quality, l = ilvl, v = sellPrice, c = classID, s = subclassID,
+      i = type(icon) == "number" and icon or nil } -- icon file ID, so the website can show it
+  end
 end
 
 local function QueueItem(id)
-  if type(id) ~= "number" or queued[id] or db.items[id] then return end
+  -- Items saved before icons were recorded (no `i`) are fetched again once.
+  if type(id) ~= "number" or queued[id] or (db.items[id] and db.items[id].i) then return end
   queued[id] = true
   itemQueue[#itemQueue + 1] = id
 end
@@ -384,7 +388,7 @@ end
 -- minimap orb or /ledger (it never opens by itself).
 -- ===========================================================================
 
-local SITE = "https://wow-market.apps.inevitable.fyi"
+local SITE = "https://goblin.trading"
 local guide
 local GREEN, YELLOW, GREY = "|cff40ff40", "|cffffd100", "|cff9d9d9d"
 

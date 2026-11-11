@@ -16,12 +16,15 @@
 # (brew install jsign azure-cli; az login) when ~/.config/marketledger/windows-signing.env exists:
 #   TS_ENDPOINT=https://<region>.codesigning.azure.net   TS_ACCOUNT=<account>   TS_PROFILE=<certificate profile>
 # Without it the Windows build is unsigned (SmartScreen warns on first run).
+#
+# VirusTotal: with a (free) API key in ~/.config/marketledger/virustotal.key, --publish uploads each
+# build to VirusTotal and the site links its report beside the download.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 cd "$HERE"
 V=$(cat VERSION)
-SERVER=${SERVER:-https://wow-market.apps.inevitable.fyi}
+SERVER=${SERVER:-https://goblin.trading}
 PUBLISH=false
 [ "${1:-}" = "--publish" ] && PUBLISH=true
 DIST="$HERE/dist"
@@ -129,10 +132,20 @@ ls -la "$DIST"
 if $PUBLISH; then
   if [ -z "$IDENTITY" ]; then echo "refusing to publish an ad-hoc signed Mac app" >&2; exit 1; fi
   TOKEN=$(security find-generic-password -s wow-market -a upload -w)
+  VT_KEY_FILE="$HOME/.config/marketledger/virustotal.key"
   for f in "$MAC_ZIP" "$DIST/MarketLedger-Setup.exe"; do
+    VT=""
+    if [ -f "$VT_KEY_FILE" ]; then
+      say "uploading $(basename "$f") to VirusTotal"
+      if curl -fsS -H "x-apikey: $(cat "$VT_KEY_FILE")" -F "file=@$f" https://www.virustotal.com/api/v3/files >/dev/null; then
+        VT="https://www.virustotal.com/gui/file/$(shasum -a 256 "$f" | cut -d' ' -f1)"
+      else
+        say "warning: VirusTotal upload failed; publishing without a report link"
+      fi
+    fi
     say "publishing $(basename "$f")"
     curl -fsS -X PUT -H "Authorization: Bearer $TOKEN" --data-binary @"$f" \
-      "$SERVER/api/admin/release/$(basename "$f")?version=$V"
+      "$SERVER/api/admin/release/$(basename "$f")?version=$V${VT:+&vt=$(printf %s "$VT" | jq -sRr @uri)}"
     echo
   done
 

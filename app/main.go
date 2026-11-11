@@ -30,7 +30,10 @@ import (
 
 var version = "dev" // set at build time: -ldflags "-X main.version=1.2.3"
 
-const defaultServer = "https://wow-market.apps.inevitable.fyi"
+const defaultServer = "https://goblin.trading"
+
+// Earlier versions saved this address in their settings; it still works, but move them over.
+const oldDefaultServer = "https://wow-market.apps.inevitable.fyi"
 
 //go:embed icon.png
 var iconPNG []byte
@@ -128,7 +131,7 @@ func (a *App) loadConfig() {
 	if err == nil {
 		_ = json.Unmarshal(b, &a.cfg)
 	}
-	if a.cfg.Server == "" {
+	if a.cfg.Server == "" || a.cfg.Server == oldDefaultServer {
 		a.cfg.Server = defaultServer
 	}
 	if s := os.Getenv("MARKETLEDGER_SERVER"); s != "" { // development
