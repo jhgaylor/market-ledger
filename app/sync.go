@@ -57,6 +57,12 @@ var uploadFiles = []struct{ kind, name string }{
 // Upload any saved-variables file that changed since its last upload. WoW writes these when you
 // log out or /reload; a file written in the last few seconds is left for the next pass.
 func (a *App) uploadChanged() {
+	a.mu.Lock()
+	empty := a.status["upload"] == ""
+	a.mu.Unlock()
+	if empty {
+		a.setStatus("upload", "Waiting for WoW to save a scan (log out or /reload)")
+	}
 	for _, root := range a.roots() {
 		for _, dir := range savedVariablesDirs(root) {
 			for _, f := range uploadFiles {

@@ -193,8 +193,8 @@ func (a *App) onReady() {
 		a.items[key] = it
 	}
 	systray.AddSeparator()
-	a.update = systray.AddMenuItem("Update available", "Download and install the newer Market Ledger app")
-	a.update.Hide()
+	a.update = systray.AddMenuItem("Checking for updates…", "Download and install a newer Market Ledger app")
+	a.update.Disable()
 	syncItem := systray.AddMenuItem("Sync now", "Upload new scans and download the latest prices")
 	siteItem := systray.AddMenuItem("Open the Market Ledger website", "")
 	mineItem := systray.AddMenuItem("See my uploads", "Check that your scans reached the website")
@@ -351,14 +351,15 @@ func (a *App) checkAppUpdate() {
 	for _, r := range rels {
 		if r.Name == name && version != "dev" && newer(r.Version, version) {
 			a.update.SetTitle("Update to " + r.Version + " now")
-			a.update.Show()
+			a.update.Enable()
 			if os.Getenv("MARKETLEDGER_TEST_UPDATE") == "1" { // development: exercise the updater
 				go a.updateNow()
 			}
 			return
 		}
 	}
-	a.update.Hide()
+	a.update.SetTitle("Up to date (" + version + ")")
+	a.update.Disable()
 }
 
 // newer reports whether dotted version x is greater than y ("0.10.0" > "0.9.2").
