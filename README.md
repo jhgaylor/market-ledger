@@ -44,8 +44,8 @@ password, and doesn't need admin rights. It listens only on `127.0.0.1:47613`, s
 (or the Windows installer) can ask the running one to quit.
 
 Builds: the Mac app is signed with Apple Developer ID *Jake Gaylor (HNDPMQPF22)* and notarized by
-Apple (`codesign -dv --verbose=2 "/Applications/Market Ledger.app"`). Windows builds are being
-moved to Microsoft Trusted Signing.
+Apple (`codesign -dv --verbose=2 "/Applications/Market Ledger.app"`). Windows builds are not
+code-signed; each release's VirusTotal report is linked on the site's download page.
 
 ## Building
 
