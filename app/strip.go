@@ -5,11 +5,13 @@ import (
 	"regexp"
 )
 
-// What the app sends from Auctionator's saved file: its price database and vendor price cache.
+// What the app sends from Auctionator's saved file: its price database, vendor price cache and the
+// time of its last scan.
 // Its settings, shopping lists, posting history and recent searches stay on your computer.
 var auctionatorKeep = map[string]bool{
 	"AUCTIONATOR_PRICE_DATABASE":     true,
 	"AUCTIONATOR_VENDOR_PRICE_CACHE": true,
+	"AUCTIONATOR_SAVEDVARS":          true, // only scan timestamps: when the scan was done
 }
 
 var topLevel = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]* = `)
