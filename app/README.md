@@ -11,4 +11,5 @@ itself with the server on first run (`POST /api/installs`); there's no token to 
 - Develop against a local server and a fake WoW folder:
   `MARKETLEDGER_SERVER=http://127.0.0.1:8098 MARKETLEDGER_CONFIG_DIR=/tmp/ml MARKETLEDGER_WOW_ROOTS="/tmp/fake/World of Warcraft" go run .`
 - Config and log: `~/Library/Application Support/MarketLedger/` (Mac),
-  `%APPDATA%\MarketLedger\` (Windows). Windows installs itself to `%LOCALAPPDATA%\MarketLedger`.
+  `%APPDATA%\MarketLedger\` (Windows). On Windows the NSIS installer (`installer.nsi`) installs per-user to
+  `%LOCALAPPDATA%\Programs\Market Ledger`. Updates install in place from the tray menu.

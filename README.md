@@ -24,7 +24,9 @@ Runs inside WoW, which gives addons **no file access and no internet access**.
   the app is installed, from `Data/Feed.lua`, the guild's merged prices the app writes there.
 - **Saved data** (`MARKETLEDGER_DB` in `SavedVariables/MarketLedger.lua`): item names and
   categories, and for each of your characters its name, class, race, level, faction, professions
-  and known recipes.
+  and known recipes; and the auction house scans you run with Auctionator (from addon 0.8.0): when
+  each scan ran, whether it was a full scan, and the cheapest price and number listed of each item
+  it saw.
 - A minimap button and a guide window (`/ledger`). Nothing opens by itself.
 
 ## The app

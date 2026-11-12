@@ -7,6 +7,9 @@
 -- 2. Data for the Market Ledger website: item names and categories, your character's class,
 --    level and professions, and the recipes you know (open each profession window once). Saved to
 --    MARKETLEDGER_DB; the uploader sends it with Auctionator's scans.
+-- 3. Your auction house scans, as they happen: when each one ran, whether it was a full scan that
+--    finished, and the cheapest price and number up of each item it saw (MARKETLEDGER_DB.scans).
+--    Auctionator only keeps a per-day summary, which can't tell the website what's listed now.
 
 local ADDON = "MarketLedger"
 local PREFIX = "MktLedger"      -- addon message prefix (max 16 chars)
@@ -43,7 +46,7 @@ local function FeedRealm()
   for _, r in pairs(f.realms) do return r end
 end
 
--- From the feed: price, days old, 7-day average, listed, how many uploaders agreed.
+-- From the feed: price, days old, usual price (7-day median), units listed, how many sources saw it.
 local function FeedInfo(link)
   local realm = FeedRealm()
   if not realm then return nil end
@@ -57,7 +60,7 @@ local function FeedInfo(link)
   return e[1], e[4] and (DayNumber() - e[4]) or nil, e[2], e[3], e[5]
 end
 
--- From this player's own Auctionator scans: price, days old, 7-day average, listed.
+-- From this player's own Auctionator scans: price, days old, usual price (7-day median), listed.
 local function LocalInfo(link)
   local api = Atr()
   if not api then return nil end
@@ -71,12 +74,15 @@ local function LocalInfo(link)
     local ok, hist = pcall(dbm.GetPriceHistory, dbm, key)
     if ok and type(hist) == "table" and hist[1] then
       avail = hist[1].available
-      local newest, total, n = tonumber(hist[1].rawDay), 0, 0
+      -- The median daily low of the last 7 days, as the website's "usual" price.
+      local newest, lows = tonumber(hist[1].rawDay), {}
       for _, h in ipairs(hist) do
         local day = tonumber(h.rawDay)
-        if newest and day and day > newest - 7 and h.minSeen then total, n = total + h.minSeen, n + 1 end
+        if newest and day and day > newest - 7 and h.minSeen then lows[#lows + 1] = h.minSeen end
       end
-      if n > 0 then mean = total / n end
+      table.sort(lows)
+      local n = #lows
+      if n > 0 then mean = n % 2 == 1 and lows[(n + 1) / 2] or (lows[n / 2] + lows[n / 2 + 1]) / 2 end
     end
   end
   return price, age, mean, avail
@@ -170,7 +176,7 @@ local function Answer(p)
     local parts = { link .. ":" }
     if price then
       parts[#parts + 1] = Money(price)
-      if mean and mean > 0 then parts[#parts + 1] = "· 7-day avg " .. Money(mean) end
+      if mean and mean > 0 then parts[#parts + 1] = "· usual " .. Money(mean) end
       if avail then parts[#parts + 1] = format("· %d listed", avail) end
       parts[#parts + 1] = "· " .. AgeText(age)
       if from == "my scan" or (from and from:find("scanners")) then parts[#parts + 1] = "(" .. from .. ")" end
@@ -384,6 +390,108 @@ local function CollectItemInfo()
 end
 
 -- ===========================================================================
+-- Scans: what each auction house scan saw, and when
+-- ===========================================================================
+--
+-- Every price Auctionator takes from browsing the auction house passes through
+-- Auctionator.Database:ProcessScan as one batch (item key -> the listings seen). We record each
+-- batch: its time, the cheapest price and total units per item, and whether it was a full scan.
+-- A batch is full only if it was processed between Auctionator's scan-start and scan-complete
+-- events; an abandoned or interrupted scan, or an ordinary search, is partial.
+
+local SCAN_KEEP_SECS = 3 * 86400  -- scans older than this are dropped (the app uploads well before)
+local SCAN_KEEP_FULL = 4          -- at most this many full scans
+local SCAN_KEEP_ALL = 60          -- and this many scans in all
+
+local hookedDb, scanStartedAt, pendingFull
+
+local function ScanEvents()
+  local out = {}
+  for _, ns in ipairs({ Auctionator and Auctionator.IncrementalScan, Auctionator and Auctionator.FullScan }) do
+    local ev = ns and ns.Events
+    if ev and ev.ScanStart then out[#out + 1] = ev end
+  end
+  return out
+end
+
+local function PruneScans()
+  local scans, now, full = db.scans, time(), 0
+  for i = #scans, 1, -1 do
+    local s = scans[i]
+    local old = type(s) ~= "table" or not s.t or now - s.t > SCAN_KEEP_SECS
+    if not old and s.full then
+      full = full + 1
+      if full > SCAN_KEEP_FULL then old = true end
+    end
+    if old then table.remove(scans, i) end
+  end
+  while #scans > SCAN_KEEP_ALL do table.remove(scans, 1) end
+end
+
+local function RecordBatch(info)
+  if type(info) ~= "table" then return end
+  local p, a, n = {}, {}, 0
+  for key, list in pairs(info) do
+    if type(key) == "string" and type(list) == "table" and list[1] then
+      local low, units = nil, 0
+      for _, l in ipairs(list) do
+        if type(l.price) == "number" and (low == nil or l.price < low) then low = l.price end
+        units = units + (tonumber(l.available) or 0)
+      end
+      if low then p[key] = low; a[key] = units; n = n + 1 end
+    end
+  end
+  if n == 0 then return end
+  local scan = { t = time(), realm = Auctionator.State and Auctionator.State.CurrentRealm, d = DayNumber(), n = n, p = p, a = a }
+  if scanStartedAt then
+    -- The full scan's results: complete only once Auctionator says so.
+    scan.t = scanStartedAt
+    pendingFull = scan
+    scanStartedAt = nil
+  end
+  db.scans[#db.scans + 1] = scan
+  PruneScans()
+end
+
+local scanListener = {}
+function scanListener:ReceiveEvent(event)
+  for _, ev in ipairs(ScanEvents()) do
+    if event == ev.ScanStart then
+      scanStartedAt, pendingFull = time(), nil
+    elseif event == ev.ScanComplete then
+      if pendingFull then pendingFull.full, pendingFull.done = true, time() end
+      scanStartedAt, pendingFull = nil, nil
+    elseif event == ev.ScanFailed then
+      scanStartedAt, pendingFull = nil, nil
+    end
+  end
+end
+
+-- Hook Auctionator once its database exists (it's made when Auctionator loads its saved data).
+local function HookScans()
+  local adb = Auctionator and Auctionator.Database
+  if type(adb) ~= "table" or type(adb.ProcessScan) ~= "function" or hookedDb == adb then return end
+  local process = adb.ProcessScan
+  adb.ProcessScan = function(self, info, ...)
+    -- A new batch cancels one Auctionator is still processing: a full scan that hasn't completed
+    -- by now never will, and stays partial.
+    pendingFull = nil
+    -- Never let our bookkeeping break Auctionator's.
+    local ok, err = pcall(RecordBatch, info)
+    if not ok then Print("couldn't record a scan: " .. tostring(err)) end
+    return process(self, info, ...)
+  end
+  if not hookedDb and Auctionator.EventBus then
+    local names = {}
+    for _, ev in ipairs(ScanEvents()) do
+      names[#names + 1] = ev.ScanStart; names[#names + 1] = ev.ScanComplete; names[#names + 1] = ev.ScanFailed
+    end
+    if #names > 0 then Auctionator.EventBus:Register(scanListener, names) end
+  end
+  hookedDb = adb
+end
+
+-- ===========================================================================
 -- The guide: a window that walks you through setup, opened only from the
 -- minimap orb or /ledger (it never opens by itself).
 -- ===========================================================================
@@ -453,7 +561,7 @@ local PAGES = {
   { title = "Price checks", text = function() return table.concat({
     YELLOW .. "Ask the guild:|r type " .. YELLOW .. "?|r and shift-click an item in guild, officer, party or raid chat. Up to three items at once.",
     "One player with Market Ledger answers, so the channel gets a single reply however many have it installed:",
-    GREY .. "[Ledger] [Copper Ore]: 61c · 7-day avg 65c · 9238 listed · scanned today (4 scanners)|r",
+    GREY .. "[Ledger] [Copper Ore]: 61c · usual 65c · 9238 listed · scanned today (4 scanners)|r",
     "That's the cheapest listing on the latest scan, the average over a week, how many were listed, how fresh the data is, and how many people's scans agree.",
     YELLOW .. "Just for you:|r type " .. YELLOW .. "/ledger|r and shift-click an item.",
     "Guild prices refresh when you log in or /reload.",
@@ -618,10 +726,11 @@ f:SetScript("OnEvent", function(self, event, ...)
     db = MARKETLEDGER_DB
     db.chars, db.characters, db.items = db.chars or {}, db.characters or {}, db.items or {}
     db.minimap = db.minimap or {}
+    db.scans = type(db.scans) == "table" and db.scans or {}
     charKey = PlayerName() .. " @ " .. GetRealmName()
     self:UnregisterEvent("ADDON_LOADED")
     for _, e in ipairs({ "PLAYER_LOGIN", "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED",
-      "SKILL_LINES_CHANGED", "PLAYER_LEVEL_UP", "AUCTION_HOUSE_CLOSED", "CHAT_MSG_ADDON" }) do self:RegisterEvent(e) end
+      "SKILL_LINES_CHANGED", "PLAYER_LEVEL_UP", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "CHAT_MSG_ADDON" }) do self:RegisterEvent(e) end
     for e in pairs(CHANNELS) do self:RegisterEvent(e) end
     C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
   elseif event == "PLAYER_LOGIN" then
@@ -631,6 +740,7 @@ f:SetScript("OnEvent", function(self, event, ...)
       C_Timer.After(5, function() C_ChatInfo.SendAddonMessage(PREFIX, "H:" .. helloNonce, "GUILD") end)
     end
     if not Atr() then Print("Auctionator isn't loaded, so price checks can't answer. Install Auctionator.") end
+    HookScans()
     C_Timer.After(10, function() SaveCharacter(); CollectItemInfo() end)
     CreateOrb()
   elseif event == "CHAT_MSG_ADDON" then
@@ -639,6 +749,8 @@ f:SetScript("OnEvent", function(self, event, ...)
     if me then OnChat(event, ...) end
   elseif event == "SKILL_LINES_CHANGED" or event == "PLAYER_LEVEL_UP" then
     C_Timer.After(1, SaveCharacter)
+  elseif event == "AUCTION_HOUSE_SHOW" then
+    HookScans()
   elseif event == "AUCTION_HOUSE_CLOSED" then
     db.lastAuction = time()
     CollectItemInfo()
@@ -662,7 +774,7 @@ SlashCmdList.MARKETLEDGER = function(msg)
   end
   if link then
     local price, age, mean, avail, from = PriceInfo(link)
-    Print(format("%s: %s, 7-day avg %s, %s listed, %s (%s)", link, Money(price), Money(mean), tostring(avail or "?"), AgeText(age), from or "no data"))
+    Print(format("%s: %s, usual %s, %s listed, %s (%s)", link, Money(price), Money(mean), tostring(avail or "?"), AgeText(age), from or "no data"))
   else
     local f = MARKETLEDGER_FEED
     if type(f) == "table" and f.generated then

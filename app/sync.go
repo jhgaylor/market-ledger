@@ -105,6 +105,7 @@ func (a *App) upload(kind string, data []byte) error {
 	req, _ := http.NewRequest("POST", a.cfg.Server+"/api/upload/"+kind, bytes.NewReader(data))
 	req.Header.Set("Authorization", a.authHeader())
 	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("X-MarketLedger-Version", version)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
